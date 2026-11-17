@@ -2,7 +2,7 @@
 // and client (middleware/auth.global.ts) — kept here, not in server/utils,
 // because server/utils/permissions.ts pulls in `prisma` (Node-only driver),
 // which must never end up in the client bundle.
-export const GATEABLE_MODULES = ["produits", "stock", "ventes", "rapports", "depenses"] as const;
+export const GATEABLE_MODULES = ["produits", "stock", "ventes", "rapports", "depenses", "hotel", "hotel-documents"] as const;
 export type GateableModule = (typeof GATEABLE_MODULES)[number];
 
 // Path prefixes that require a given module's access when the current
@@ -20,4 +20,9 @@ export const MODULE_ROUTE_PREFIXES: Record<GateableModule, string[]> = {
   ventes: ["/ventes"],
   rapports: ["/rapports", "/comptabilite"],
   depenses: ["/depenses"],
+  // Hotel pages are guarded separately in middleware/auth.global.ts (the
+  // module must also be active and linked to the user), so the CASHIER
+  // prefix shortcut deliberately doesn't cover them.
+  hotel: [],
+  "hotel-documents": [],
 };

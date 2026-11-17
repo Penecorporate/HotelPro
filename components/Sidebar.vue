@@ -59,7 +59,13 @@ const ICONS: Record<string, string> = {
   Utilisateurs: "fa-users",
   "Rôles & permissions": "fa-user-shield",
   Paramètres: "fa-gear",
+  Hôtel: "fa-hotel",
 };
+
+// Nav entries that belong to an optional app module (lib/appModules.ts):
+// hidden unless the module is active for the company and linked to the user.
+const APP_MODULE_BY_LABEL: Record<string, string> = { Hôtel: "hotel" };
+const { data: myAppModules } = await useMyAppModules();
 
 // Display labels that differ from the route label defined in lib/menu.ts,
 // to match the mockup's wording without renaming the actual route.
@@ -93,6 +99,7 @@ const I18N_KEYS: Record<string, string> = {
   Utilisateurs: "nav.utilisateurs",
   "Rôles & permissions": "nav.roles",
   Paramètres: "nav.parametres",
+  Hôtel: "nav.hotel",
 };
 function navLabel(label: string): string {
   const key = I18N_KEYS[label];
@@ -137,6 +144,8 @@ const navRows = computed<NavRow[]>(() => {
     if (item.submenu) {
       for (const sub of item.submenu) {
         if (sub.roles && !sub.roles.includes(user.value?.role as any)) continue;
+        const appModule = APP_MODULE_BY_LABEL[sub.lable];
+        if (appModule && !myAppModules.value?.modules.includes(appModule)) continue;
         if (sub.childer && sub.childer.length) {
           rows.push({
             type: "group",

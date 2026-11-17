@@ -26,7 +26,8 @@
     "comptabilite": "Comptabilité",
     "utilisateurs": "Utilisateurs",
     "roles": "Rôles & permissions",
-    "parametres": "Paramètres"
+    "parametres": "Paramètres",
+    "hotel": "Hôtel"
   },
   "sidebar": {
     "needHelp": "Besoin d'aide ?",

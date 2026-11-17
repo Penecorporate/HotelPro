@@ -62,6 +62,17 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
   }
 
+  // Hotel module: must be active for the company and linked to this user
+  // (OWNER only needs it active). Checked before the CASHIER prefix list so a
+  // linked cashier can enter /hotel, and an unlinked one can't.
+  if (to.path === "/hotel" || to.path.startsWith("/hotel/")) {
+    const { data: appModules } = await useMyAppModules();
+    if (!appModules.value?.modules.includes("hotel")) {
+      return navigateTo(user.value?.role === "CASHIER" ? "/pos" : "/");
+    }
+    return;
+  }
+
   if (
     user.value?.role === "CASHIER" &&
     !CASHIER_ALLOWED_PREFIXES.some((prefix) => to.path.startsWith(prefix))

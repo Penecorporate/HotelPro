@@ -33,6 +33,10 @@ const CASHIER_NAME = "Mamadou Diop";
 const CASHIER_EMAIL = "caisse@caissebi.com";
 const CASHIER_USERNAME = "caisse";
 
+const RECEPTION_NAME = "Awa Sarr";
+const RECEPTION_EMAIL = "reception@caissebi.com";
+const RECEPTION_USERNAME = "reception";
+
 async function main() {
   const company = await prisma.company.upsert({
     where: { id: 1 },
@@ -115,14 +119,58 @@ async function main() {
   // starts with none, matching today's behaviour. OWNER never needs a row —
   // it always has full access.
   const GATEABLE_MODULES = ["produits", "stock", "ventes", "rapports", "depenses"];
+  const HOTEL_GATEABLE_MODULES = ["hotel", "hotel-documents"];
   for (const role of ["MANAGER", "GERANT"] as const) {
-    for (const moduleName of GATEABLE_MODULES) {
+    for (const moduleName of [...GATEABLE_MODULES, ...HOTEL_GATEABLE_MODULES]) {
       await prisma.rolePermission.upsert({
         where: { companyId_role_module: { companyId: company.id, role, module: moduleName } },
         update: {},
         create: { companyId: company.id, role, module: moduleName },
       });
     }
+  }
+  // CASHIER gets only "hotel" (no documents): enough for a receptionist
+  // account, but still unusable until that user is explicitly linked to the
+  // Hôtel module below / by Direction.
+  await prisma.rolePermission.upsert({
+    where: { companyId_role_module: { companyId: company.id, role: "CASHIER", module: "hotel" } },
+    update: {},
+    create: { companyId: company.id, role: "CASHIER", module: "hotel" },
+  });
+
+  // --- Optional app modules -------------------------------------------------
+  // Only the super admin (OWNER) can toggle a module or link users to it, and
+  // license generation stays outside the app (scripts/generate-license.ts).
+  // Seeded demo: Hôtel active, attributed to the OWNER; linked to the manager
+  // and to a dedicated receptionist. The existing cashier ("caisse") is NOT
+  // linked on purpose, to demonstrate that rights alone don't open the module.
+  await prisma.companyModule.upsert({
+    where: { companyId_module: { companyId: company.id, module: "hotel" } },
+    update: {},
+    create: { companyId: company.id, module: "hotel", active: true, activatedAt: new Date(), activatedById: owner.id },
+  });
+
+  const receptionist = await prisma.user.upsert({
+    where: { email: RECEPTION_EMAIL },
+    update: { pinCode: seededPin, username: RECEPTION_USERNAME },
+    create: {
+      companyId: company.id,
+      storeId: store.id,
+      name: RECEPTION_NAME,
+      email: RECEPTION_EMAIL,
+      username: RECEPTION_USERNAME,
+      password: await hashPassword(DEFAULT_PASSWORD),
+      pinCode: seededPin,
+      role: "CASHIER",
+    },
+  });
+
+  for (const userId of [manager.id, receptionist.id]) {
+    await prisma.userModule.upsert({
+      where: { userId_module: { userId, module: "hotel" } },
+      update: {},
+      create: { userId, module: "hotel" },
+    });
   }
 
   const register = await prisma.cashRegister.upsert({
@@ -176,6 +224,7 @@ async function main() {
   console.log(`Compte administrateur : ${owner.username} (${owner.email})`);
   console.log(`Compte manager : ${manager.username} (${manager.email})`);
   console.log(`Compte caissier : ${cashier.username} (${cashier.email})`);
+  console.log(`Compte réception (module Hôtel) : ${receptionist.username} (${receptionist.email})`);
   console.log(`Caisse : ${register.name}`);
 }
 

@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
       storeId: true,
       store: { select: { name: true } },
       active: true,
+      modules: { select: { module: true } },
       createdAt: true,
     },
     orderBy: { name: "asc" },

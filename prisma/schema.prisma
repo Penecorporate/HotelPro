@@ -46,6 +46,7 @@ model Company {
   expenses           Expense[]
   licenses           License[]
   rolePermissions    RolePermission[]
+  modules            CompanyModule[]
 }
 
 // A physical branch/location under a Company. Stores are fully independent
@@ -108,6 +109,8 @@ model User {
   expenses           Expense[]
   generatedLicenses  License[]
   pushSubscriptions  PushSubscription[]
+  modules            UserModule[]
+  activatedModules   CompanyModule[]
 
   @@index([companyId])
 }
@@ -472,4 +475,36 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([companyId])
+}
+
+// Optional business modules (e.g. "hotel") that Direction (OWNER) switches on
+// or off for the whole company. Absence of a row = module is off. Activation
+// is the first of three gates — see server/utils/appModules.ts.
+model CompanyModule {
+  id            Int       @id @default(autoincrement())
+  companyId     Int
+  company       Company   @relation(fields: [companyId], references: [id])
+  module        String
+  active        Boolean   @default(false)
+  activatedAt   DateTime?
+  activatedById Int?
+  activatedBy   User?     @relation(fields: [activatedById], references: [id])
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([companyId, module])
+  @@index([companyId])
+}
+
+// Links a user to an activated module: second gate. Only OWNER can create
+// these rows. Fine-grained rights inside the module stay in RolePermission
+// (third gate).
+model UserModule {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  module    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, module])
+  @@index([userId])
 }

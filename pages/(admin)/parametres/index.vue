@@ -42,6 +42,27 @@ watchEffect(() => {
 });
 
 const toast = useToast();
+
+const { user } = useUserSession();
+const isOwner = computed(() => user.value?.role === "OWNER");
+const { data: appModules, refresh: refreshModules } = isOwner.value
+  ? await useFetch<any[]>("/api/modules")
+  : { data: ref<any[]>([]), refresh: async () => {} };
+const moduleSaving = ref(false);
+
+async function toggleModule(m: any) {
+  moduleSaving.value = true;
+  try {
+    await $fetch(`/api/modules/${m.module}`, { method: "PATCH", body: { active: !m.active } });
+    toast.success(m.active ? `Module ${m.label} désactivé.` : `Module ${m.label} activé.`);
+    await refreshModules();
+    await refreshNuxtData("my-app-modules");
+  } catch (e: any) {
+    toast.error(e?.data?.statusMessage ?? "Une erreur est survenue");
+  } finally {
+    moduleSaving.value = false;
+  }
+}
 const saving = ref(false);
 const errorMessage = ref("");
 
@@ -207,6 +228,33 @@ async function save() {
                   <label class="mb-1">Message de pied de ticket</label>
                   <input v-model="form.receiptFooter" type="text" class="h-11 w-full rounded-lg border border-border bg-transparent px-3 focus:border-primary" />
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Modules (Direction only: only the super admin switches modules) -->
+          <div v-if="isOwner" class="card !h-auto">
+            <div class="p-5">
+              <div class="mb-4 flex items-center gap-3">
+                <span class="flex size-9 shrink-0 items-center justify-center rounded-full text-white" :style="{ background: NAVY }">
+                  <i class="fa fa-puzzle-piece"></i>
+                </span>
+                <h5 class="text-sm font-semibold uppercase text-body">Modules</h5>
+              </div>
+              <div v-for="m in appModules" :key="m.module" class="flex items-center justify-between gap-3 border-t border-border py-3 first:border-t-0">
+                <div>
+                  <p class="font-medium">{{ m.label }}</p>
+                  <p class="text-2xs text-body">{{ m.active ? `Activé · ${m.userCount} utilisateur(s) lié(s)` : "Désactivé" }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :class="m.active ? 'bg-danger text-white' : 'bg-primary text-white'"
+                  :disabled="moduleSaving"
+                  @click="toggleModule(m)"
+                >
+                  {{ m.active ? "Désactiver" : "Activer" }}
+                </button>
               </div>
             </div>
           </div>

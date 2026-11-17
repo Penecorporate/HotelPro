@@ -26,6 +26,14 @@ const { data: users, refresh } = await useFetch("/api/users");
 // picker below simply doesn't render for them, since they can't create or
 // edit users anyway (server-enforced).
 const { data: stores } = await useFetch("/api/stores");
+// OWNER-only (403 otherwise): optional app modules (e.g. Hôtel) a user can be
+// linked to. A module only shows if Direction has activated it.
+const isOwner = computed(() => user.value?.role === "OWNER");
+const { data: appModules } = isOwner.value
+  ? await useFetch<any[]>("/api/modules")
+  : { data: ref<any[]>([]) };
+const linkableModules = computed(() => (appModules.value ?? []).filter((m) => m.active));
+const selectedModules = ref<string[]>([]);
 const toast = useToast();
 const { confirmAction } = useConfirm();
 
@@ -52,12 +60,14 @@ const pinCodeValid = computed(() => !form.pinCode || /^\d{4}$/.test(form.pinCode
 function openCreate() {
   editing.value = null;
   Object.assign(form, { name: "", email: "", username: "", password: "", pinCode: "", role: "CASHIER", storeId: null });
+  selectedModules.value = [];
   showForm.value = true;
 }
 
 function openEdit(u: any) {
   editing.value = u;
   Object.assign(form, { name: u.name, email: u.email, username: u.username, password: "", pinCode: "", role: u.role, storeId: u.storeId });
+  selectedModules.value = (u.modules ?? []).map((m: any) => m.module);
   showForm.value = true;
 }
 
@@ -69,12 +79,14 @@ async function save() {
   saving.value = true;
   errorMessage.value = "";
   try {
+    let savedId: number | null = null;
     if (editing.value) {
       const body: any = { name: form.name, username: form.username, role: form.role };
       if (form.role !== "OWNER") body.storeId = form.storeId;
       if (form.password) body.password = form.password;
       if (form.pinCode) body.pinCode = form.pinCode;
       await $fetch(`/api/users/${editing.value.id}`, { method: "PATCH", body });
+      savedId = editing.value.id;
     } else {
       const body: any = {
         name: form.name,
@@ -85,9 +97,17 @@ async function save() {
         role: form.role,
         storeId: form.role === "OWNER" ? null : form.storeId,
       };
-      await $fetch("/api/users", {
+      const created: any = await $fetch("/api/users", {
         method: "POST",
         body,
+      });
+      savedId = created.id;
+    }
+    // Direction-only; OWNER accounts need no link (full access).
+    if (isOwner.value && savedId) {
+      await $fetch(`/api/users/${savedId}/modules`, {
+        method: "PUT",
+        body: { modules: form.role === "OWNER" ? [] : selectedModules.value },
       });
     }
     showForm.value = false;
@@ -269,6 +289,18 @@ const tableOptions = {
           </select>
         </template>
         <p v-else class="mb-5 text-2xs text-body">La Direction voit tous les magasins et peut basculer entre eux.</p>
+
+        <template v-if="isOwner && form.role !== 'OWNER'">
+          <label class="mb-1">Modules</label>
+          <div class="mb-5 rounded-lg border border-border px-3 py-2">
+            <label v-for="m in linkableModules" :key="m.module" class="flex items-center gap-2 py-1">
+              <input v-model="selectedModules" type="checkbox" :value="m.module" />
+              {{ m.label }}
+            </label>
+            <p v-if="!linkableModules.length" class="text-2xs text-body">Aucun module activé. Activez-en un dans Paramètres › Modules.</p>
+            <p v-else class="mt-1 text-2xs text-body">Donne accès à l'espace du module ; les droits précis dépendent du rôle (Rôles &amp; permissions).</p>
+          </div>
+        </template>
 
         <div class="flex gap-2">
           <button type="button" class="btn flex-1 border border-border" @click="showForm = false">Annuler</button>

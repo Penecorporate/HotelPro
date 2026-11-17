@@ -17,6 +17,8 @@ const MODULES: { key: string; label: string }[] = [
   { key: "ventes", label: "Ventes" },
   { key: "rapports", label: "Rapports" },
   { key: "depenses", label: "Dépenses" },
+  { key: "hotel", label: "Hôtel" },
+  { key: "hotel-documents", label: "Hôtel — documents" },
 ];
 
 const ROLES: { key: "MANAGER" | "GERANT" | "CASHIER"; label: string }[] = [

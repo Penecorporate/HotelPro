@@ -81,6 +81,9 @@ export const menuItems: MenuItem[] = [
       { lable: "Utilisateurs", link: "/utilisateurs" },
       { lable: "Rôles & permissions", link: "/utilisateurs/roles", roles: ["OWNER"] },
       { lable: "Paramètres", link: "/parametres" },
+      // Shown only when the "hotel" app module is usable by the current user
+      // (active + linked) — filtered dynamically in components/Sidebar.vue.
+      { lable: "Hôtel", link: "/hotel" },
     ],
   },
 ];
