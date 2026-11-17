@@ -47,6 +47,10 @@ model Company {
   licenses           License[]
   rolePermissions    RolePermission[]
   modules            CompanyModule[]
+  hotelRooms         HotelRoom[]
+  hotelGuests        HotelGuest[]
+  hotelReservations  HotelReservation[]
+  hotelDocuments     HotelDocument[]
 }
 
 // A physical branch/location under a Company. Stores are fully independent
@@ -507,4 +511,112 @@ model UserModule {
 
   @@unique([userId, module])
   @@index([userId])
+}
+
+// ───────────────────────── Hotel module ─────────────────────────
+// Company-scoped (not store-scoped). Gated by the "hotel" / "hotel-documents"
+// permissions + the "hotel" app module (see lib/appModules.ts).
+
+enum HotelRoomStatus {
+  AVAILABLE
+  OCCUPIED
+  CLEANING
+  MAINTENANCE
+}
+
+enum HotelReservationStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+model HotelRoom {
+  id            Int             @id @default(autoincrement())
+  companyId     Int
+  company       Company         @relation(fields: [companyId], references: [id])
+  number        String
+  type          String          @default("Standard")
+  floor         Int?
+  capacity      Int             @default(2)
+  pricePerNight Decimal         @default(0) @db.Decimal(12, 2)
+  status        HotelRoomStatus @default(AVAILABLE)
+  description   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  reservations HotelReservation[]
+
+  @@unique([companyId, number])
+  @@index([companyId])
+}
+
+model HotelGuest {
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id])
+  firstName   String
+  lastName    String
+  phone       String?
+  email       String?
+  nationality String?
+  idType      String?
+  idNumber    String?
+  address     String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reservations HotelReservation[]
+  documents    HotelDocument[]
+
+  @@index([companyId])
+}
+
+model HotelReservation {
+  id          Int                    @id @default(autoincrement())
+  companyId   Int
+  company     Company                @relation(fields: [companyId], references: [id])
+  roomId      Int
+  room        HotelRoom              @relation(fields: [roomId], references: [id])
+  guestId     Int
+  guest       HotelGuest             @relation(fields: [guestId], references: [id])
+  checkIn     DateTime               @db.Date
+  checkOut    DateTime               @db.Date
+  adults      Int                    @default(1)
+  children    Int                    @default(0)
+  status      HotelReservationStatus @default(CONFIRMED)
+  totalPrice  Decimal                @default(0) @db.Decimal(12, 2)
+  paidAmount  Decimal                @default(0) @db.Decimal(12, 2)
+  notes       String?
+  createdById Int?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  documents HotelDocument[]
+
+  @@index([companyId])
+  @@index([roomId, checkIn, checkOut])
+  @@index([guestId])
+}
+
+model HotelDocument {
+  id            Int               @id @default(autoincrement())
+  companyId     Int
+  company       Company           @relation(fields: [companyId], references: [id])
+  guestId       Int?
+  guest         HotelGuest?       @relation(fields: [guestId], references: [id])
+  reservationId Int?
+  reservation   HotelReservation? @relation(fields: [reservationId], references: [id])
+  title         String
+  type          String            @default("Autre")
+  fileUrl       String?
+  fileName      String?
+  notes         String?
+  createdAt     DateTime          @default(now())
+
+  @@index([companyId])
+  @@index([guestId])
+  @@index([reservationId])
 }

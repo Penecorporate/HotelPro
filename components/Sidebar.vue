@@ -138,7 +138,20 @@ type NavRow = NavLinkRow | NavGroupRow;
 // which render as a real collapsible group instead of being flattened —
 // see the "Group stock into a submenu" task. Nothing else is renamed or
 // fabricated, only presented flatter.
+// Hotel space: while inside /hotel the sidebar shows only the hotel menu
+// (plus a way back to the main app).
+const isHotelSpace = computed(() => route.path === "/hotel" || route.path.startsWith("/hotel/"));
+const HOTEL_ROWS: NavLinkRow[] = [
+  { type: "link", key: "/hotel", label: "Tableau de bord", link: "/hotel", icon: "fa-table-columns" },
+  { type: "link", key: "/hotel/chambres", label: "Chambres", link: "/hotel/chambres", icon: "fa-bed" },
+  { type: "link", key: "/hotel/reservations", label: "Réservations", link: "/hotel/reservations", icon: "fa-calendar-check" },
+  { type: "link", key: "/hotel/clients", label: "Clients", link: "/hotel/clients", icon: "fa-users" },
+  { type: "link", key: "/hotel/documents", label: "Documents", link: "/hotel/documents", icon: "fa-file-lines" },
+  { type: "link", key: "/", label: "Retour à l'application", link: "/", icon: "fa-arrow-left" },
+];
+
 const navRows = computed<NavRow[]>(() => {
+  if (isHotelSpace.value) return HOTEL_ROWS;
   const rows: NavRow[] = [];
   for (const item of menuItems) {
     if (item.submenu) {
@@ -185,7 +198,8 @@ const navRows = computed<NavRow[]>(() => {
 });
 
 function isActive(link: string): boolean {
-  if (link === "/") return route.path === "/";
+  if (link === "/") return route.path === "/" && !isHotelSpace.value;
+  if (link === "/hotel") return route.path === "/hotel";
   return route.path === link || route.path.startsWith(link + "/");
 }
 
