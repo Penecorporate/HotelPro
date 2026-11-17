@@ -69,7 +69,16 @@ const columns = [
 
 <template>
   <div class="content-body">
-    <CommonNav title="Documents" name="Hôtel" />
+    <CommonNav
+      title="Documents"
+      name="Hôtel"
+      :help="[
+        'Classez ici les documents de l\'hôtel : pièces d\'identité, contrats, factures, reçus.',
+        'Rattachez un document à un client et/ou à une réservation pour le retrouver dans le dossier du client.',
+        'Les fichiers (pdf, jpg, png, webp, 5 Mo max) sont privés : seuls les comptes autorisés peuvent les ouvrir.',
+      ]"
+      help-title="Documents"
+    />
     <HotelCrud
       title="Documents"
       singular="document"

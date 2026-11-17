@@ -146,6 +146,9 @@ const HOTEL_ROWS: NavLinkRow[] = [
   { type: "link", key: "/hotel/chambres", label: "Chambres", link: "/hotel/chambres", icon: "fa-bed" },
   { type: "link", key: "/hotel/reservations", label: "Réservations", link: "/hotel/reservations", icon: "fa-calendar-check" },
   { type: "link", key: "/hotel/clients", label: "Clients", link: "/hotel/clients", icon: "fa-users" },
+  { type: "link", key: "/hotel/encaissement", label: "Encaissement", link: "/hotel/encaissement", icon: "fa-wallet" },
+  { type: "link", key: "/hotel/caisse", label: "Caisse", link: "/hotel/caisse", icon: "fa-vault" },
+  { type: "link", key: "/hotel/depenses", label: "Dépenses", link: "/hotel/depenses", icon: "fa-file-invoice-dollar" },
   { type: "link", key: "/hotel/documents", label: "Documents", link: "/hotel/documents", icon: "fa-file-lines" },
   { type: "link", key: "/", label: "Retour à l'application", link: "/", icon: "fa-arrow-left" },
 ];

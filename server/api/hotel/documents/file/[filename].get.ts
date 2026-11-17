@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { requireModuleAccess } from "~/server/utils/permissions";
+import { hasModuleAccess } from "~/server/utils/permissions";
+import { requireUser } from "~/server/utils/authz";
 
 const CONTENT_TYPES: Record<string, string> = {
   ".pdf": "application/pdf",
@@ -9,8 +10,13 @@ const CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
+// Files are private: readable by anyone who can open the hotel module
+// (guest ID scans) or the hotel documents.
 export default defineEventHandler(async (event) => {
-  const user = await requireModuleAccess(event, "hotel-documents");
+  const user = await requireUser(event);
+  if (!(await hasModuleAccess(user, "hotel-documents")) && !(await hasModuleAccess(user, "hotel"))) {
+    throw createError({ statusCode: 403, statusMessage: "Accès refusé" });
+  }
   const filename = getRouterParam(event, "filename") ?? "";
   const contentType = CONTENT_TYPES[path.extname(filename).toLowerCase()];
   if (!contentType || filename.includes("/") || filename.includes("\\")) {

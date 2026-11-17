@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "~/server/utils/prisma";
 import { requireModuleAccess } from "~/server/utils/permissions";
-import { assertRoomFree, parseDay, syncRoomStatus } from "~/server/utils/hotelReservation";
+import { assertRoomFree, nightsBetween, parseDay, syncPaidAmount, syncRoomStatus } from "~/server/utils/hotelReservation";
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const schema = z.object({
@@ -12,8 +12,10 @@ const schema = z.object({
   adults: z.number().int().min(1).default(1),
   children: z.number().int().min(0).default(0),
   status: z.enum(["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED"]).default("CONFIRMED"),
+  nightlyRate: z.number().min(0).nullable().optional(),
   totalPrice: z.number().min(0).nullable().optional(),
-  paidAmount: z.number().min(0).default(0),
+  deposit: z.number().min(0).nullable().optional(),
+  depositMethod: z.enum(["CASH", "CARD", "WAVE", "ORANGE_MONEY"]).nullable().optional(),
   notes: z.string().trim().nullable().optional(),
 });
 
@@ -38,8 +40,12 @@ export default defineEventHandler(async (event) => {
   }
   if (body.status !== "CANCELLED") await assertRoomFree(room.id, checkIn, checkOut);
 
-  const nights = Math.round((checkOut.getTime() - checkIn.getTime()) / 86400000);
-  const totalPrice = body.totalPrice ?? nights * Number(room.pricePerNight);
+  const nightlyRate = body.nightlyRate ?? Number(room.pricePerNight);
+  const totalPrice = body.totalPrice ?? nightsBetween(checkIn, checkOut) * nightlyRate;
+  const deposit = body.deposit ?? 0;
+  if (deposit > totalPrice) {
+    throw createError({ statusCode: 400, statusMessage: "L'acompte dépasse le montant du séjour" });
+  }
 
   const created = await prisma.hotelReservation.create({
     data: {
@@ -51,12 +57,25 @@ export default defineEventHandler(async (event) => {
       adults: body.adults,
       children: body.children,
       status: body.status,
+      nightlyRate,
       totalPrice,
-      paidAmount: body.paidAmount,
       notes: body.notes ?? null,
       createdById: user.id,
     },
   });
+  if (deposit > 0) {
+    await prisma.hotelPayment.create({
+      data: {
+        companyId: user.companyId,
+        reservationId: created.id,
+        amount: deposit,
+        method: body.depositMethod ?? "CASH",
+        note: "Acompte à la réservation",
+        createdById: user.id,
+      },
+    });
+    await syncPaidAmount(created.id);
+  }
   await syncRoomStatus(room.id, body.status);
   return created;
 });

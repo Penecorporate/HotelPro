@@ -14,6 +14,8 @@ const schema = z
     idNumber: opt,
     address: opt,
     notes: opt,
+    idFileUrl: z.string().startsWith("/api/hotel/documents/file/").nullable(),
+    idFileName: opt,
   })
   .partial();
 

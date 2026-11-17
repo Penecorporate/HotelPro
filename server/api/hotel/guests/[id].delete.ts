@@ -8,12 +8,14 @@ export default defineEventHandler(async (event) => {
   const guest = await prisma.hotelGuest.findFirst({ where: { id, companyId: user.companyId } });
   if (!guest) throw createError({ statusCode: 404, statusMessage: "Client introuvable" });
 
-  const [res, docs] = await Promise.all([
+  const [res, docs, incidents] = await Promise.all([
     prisma.hotelReservation.count({ where: { guestId: id } }),
     prisma.hotelDocument.count({ where: { guestId: id } }),
+    prisma.hotelIncident.count({ where: { guestId: id } }),
   ]);
   if (res > 0) throw createError({ statusCode: 400, statusMessage: "Client lié à des réservations" });
   if (docs > 0) throw createError({ statusCode: 400, statusMessage: "Client lié à des documents" });
+  if (incidents > 0) throw createError({ statusCode: 400, statusMessage: "Client lié à des incidents" });
 
   await prisma.hotelGuest.delete({ where: { id } });
   return { ok: true };

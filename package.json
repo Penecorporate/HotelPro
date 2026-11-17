@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
+    "db:seed:hotel": "tsx prisma/seed-hotel.ts",
     "db:studio": "prisma studio"
   },
   "prisma": {

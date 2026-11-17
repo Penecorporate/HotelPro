@@ -33,7 +33,18 @@ const columns = [
 
 <template>
   <div class="content-body">
-    <CommonNav title="Chambres" name="Hôtel" />
+    <CommonNav
+      title="Chambres"
+      name="Hôtel"
+      :help="[
+        'Créez ici toutes les chambres de l\'hôtel avec leur type, étage, capacité et prix par nuit.',
+        'Le prix de la chambre est repris automatiquement dans une nouvelle réservation (modifiable ensuite).',
+        'Le statut change tout seul : En séjour → Occupée, Départ → Nettoyage. Remettez la chambre en Disponible une fois prête.',
+        'Passez une chambre en Maintenance pour la bloquer visuellement.',
+        'Une chambre ayant déjà des réservations ne peut pas être supprimée.',
+      ]"
+      help-title="Chambres"
+    />
     <HotelCrud
       title="Chambres"
       singular="chambre"

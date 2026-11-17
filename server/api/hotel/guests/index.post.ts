@@ -13,6 +13,8 @@ const schema = z.object({
   idNumber: opt,
   address: opt,
   notes: opt,
+  idFileUrl: z.string().startsWith("/api/hotel/documents/file/").nullable().optional(),
+  idFileName: opt,
 });
 
 export default defineEventHandler(async (event) => {

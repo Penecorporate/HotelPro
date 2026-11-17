@@ -1,18 +1,30 @@
 <script lang="ts" setup>
-// Generic CRUD screen for the Hôtel module (rooms, guests, reservations,
-// documents): DataTable list + create/edit modal + delete, driven by a field
-// config so the four pages stay tiny. Follows pages/(admin)/categories.
+// Generic CRUD screen for the Hôtel module: DataTable list + create/edit modal
+// + delete, driven by a field config so every page stays tiny.
+// Follows pages/(admin)/categories.
 export interface HotelField {
   key: string;
   label: string;
-  type?: "text" | "number" | "date" | "select" | "textarea" | "file";
+  type?: "text" | "number" | "date" | "select" | "textarea" | "file" | "static";
   required?: boolean;
   options?: { value: string | number | null; label: string }[];
   step?: number;
   min?: number;
   upload?: string; // upload endpoint for type "file"
   fileNameKey?: string; // where to store the uploaded file's original name
-  full?: boolean; // span the whole row (default: half width)
+  span?: 1 | 2 | 3; // columns spanned in the wide (xl) grid
+  hint?: string; // small helper text under the input
+  createOnly?: boolean; // only shown / sent when creating
+  compute?: (form: Record<string, any>) => string; // for type "static" (read-only display)
+  noSend?: boolean; // never included in the payload
+}
+
+export interface HotelRowAction {
+  icon: string;
+  title: string;
+  cls: string; // tailwind colour classes
+  onClick: (row: any) => void;
+  show?: (row: any) => boolean;
 }
 
 const props = defineProps<{
@@ -25,7 +37,14 @@ const props = defineProps<{
   columns: any[]; // DataTables column defs (without the actions column)
   headers: string[]; // <th> labels, same order as columns
   defaults?: () => Record<string, any>;
-  data?: any[] | null; // optional externally-managed data (else fetched from endpoint)
+  size?: "md" | "xl";
+  embedded?: boolean; // no outer container (used inside another page)
+  query?: Record<string, any>; // GET filters, e.g. { guestId: 3 }
+  fixed?: Record<string, any>; // merged into the payload on create
+  autofill?: (form: Record<string, any>, changedKey: string) => void;
+  rowActions?: HotelRowAction[];
+  order?: [number, "asc" | "desc"];
+  noDelete?: boolean;
 }>();
 const emit = defineEmits<{ (e: "changed"): void }>();
 
@@ -41,8 +60,10 @@ const DT_LANGUAGE = {
   paginate: { previous: "Précédent", next: "Suivant" },
 };
 
-const { data: fetched, refresh } = await useFetch<any[]>(props.endpoint);
-const rows = computed(() => props.data ?? fetched.value ?? []);
+const { data: fetched, refresh } = await useFetch<any[]>(props.endpoint, {
+  query: computed(() => props.query ?? {}),
+});
+const rows = computed(() => fetched.value ?? []);
 const toast = useToast();
 const { confirmDanger } = useConfirm();
 
@@ -52,6 +73,10 @@ const form = reactive<Record<string, any>>({});
 const saving = ref(false);
 const uploading = ref(false);
 const errorMessage = ref("");
+let suppress = false;
+
+const visibleFields = computed(() => props.fields.filter((f) => !f.createOnly || !editing.value));
+const wide = computed(() => props.size === "xl");
 
 function emptyForm() {
   const base: Record<string, any> = {};
@@ -59,38 +84,52 @@ function emptyForm() {
   return { ...base, ...(props.defaults?.() ?? {}) };
 }
 
-function assign(values: Record<string, any>) {
+async function assign(values: Record<string, any>) {
+  // Programmatic fills must not trigger the user-driven autofill logic.
+  suppress = true;
   for (const k of Object.keys(form)) delete form[k];
   Object.assign(form, values);
+  await nextTick();
+  suppress = false;
 }
 
-function openCreate() {
+// One watcher per field → autofill(form, key) on user changes.
+for (const f of props.fields) {
+  watch(
+    () => form[f.key],
+    () => {
+      if (!suppress && showForm.value) props.autofill?.(form, f.key);
+    }
+  );
+}
+
+async function openCreate() {
   editing.value = null;
   errorMessage.value = "";
-  assign(emptyForm());
+  await assign(emptyForm());
   showForm.value = true;
 }
 
-function openEdit(row: any) {
+async function openEdit(row: any) {
   editing.value = row;
   errorMessage.value = "";
   const values = emptyForm();
   for (const f of props.fields) {
+    if (f.type === "static") continue;
     let v = row[f.key];
     if (f.type === "date" && v) v = String(v).slice(0, 10);
     if (f.type === "number" && v !== null && v !== undefined) v = Number(v);
     values[f.key] = v ?? (f.type === "select" ? null : "");
+    if (f.fileNameKey) values[f.fileNameKey] = row[f.fileNameKey] ?? "";
   }
-  if (props.fields.some((f) => f.type === "file")) {
-    for (const f of props.fields) if (f.fileNameKey) values[f.fileNameKey] = row[f.fileNameKey] ?? "";
-  }
-  assign(values);
+  await assign(values);
   showForm.value = true;
 }
 
 function payload() {
   const out: Record<string, any> = {};
-  for (const f of props.fields) {
+  for (const f of visibleFields.value) {
+    if (f.type === "static" || f.noSend) continue;
     let v = form[f.key];
     if (f.type === "number") v = v === "" || v === null || v === undefined ? null : Number(v);
     else if (f.type === "select") v = v === "" ? null : v;
@@ -122,7 +161,9 @@ async function onFile(f: HotelField, e: Event) {
 }
 
 const canSave = computed(() =>
-  props.fields.every((f) => !f.required || (form[f.key] !== "" && form[f.key] !== null && form[f.key] !== undefined))
+  visibleFields.value.every(
+    (f) => !f.required || f.type === "static" || (form[f.key] !== "" && form[f.key] !== null && form[f.key] !== undefined)
+  )
 );
 
 async function save() {
@@ -132,7 +173,7 @@ async function save() {
     if (editing.value) {
       await $fetch(`${props.endpoint}/${editing.value.id}`, { method: "PATCH", body: payload() });
     } else {
-      await $fetch(props.endpoint, { method: "POST", body: payload() });
+      await $fetch(props.endpoint, { method: "POST", body: { ...payload(), ...(props.fixed ?? {}) } });
     }
     showForm.value = false;
     toast.success(editing.value ? "Modification enregistrée." : "Élément créé.");
@@ -147,7 +188,7 @@ async function save() {
 
 async function remove(row: any) {
   const ok = await confirmDanger({
-    title: `Supprimer cette ${props.singular} ?`.replace("cette client", "ce client"),
+    title: "Supprimer cet élément ?",
     text: "Cette action est irréversible.",
     confirmText: "Supprimer",
   });
@@ -169,30 +210,46 @@ const allColumns = computed(() => [
     orderable: false,
     searchable: false,
     className: "text-end",
-    render: (_d: any, type: string) =>
-      type !== "display"
-        ? ""
-        : `<div class="flex justify-end gap-1.5">
+    render: (_d: any, type: string, row: any) => {
+      if (type !== "display") return "";
+      const extra = (props.rowActions ?? [])
+        .map((a, i) =>
+          a.show && !a.show(row)
+            ? ""
+            : `<button type="button" class="js-act-${i} row-action-btn ${a.cls}" title="${a.title}"><i class="fa ${a.icon}"></i></button>`
+        )
+        .join("");
+      return `<div class="flex justify-end gap-1.5">${extra}
         <button type="button" class="js-edit row-action-btn text-primary bg-primarylight hover:bg-primary hover:text-white" title="Modifier"><i class="fa fa-pen"></i></button>
-        <button type="button" class="js-delete row-action-btn text-danger bg-dangerlight hover:bg-danger hover:text-white" title="Supprimer"><i class="fa fa-trash"></i></button>
-      </div>`,
+        ${props.noDelete ? "" : `<button type="button" class="js-delete row-action-btn text-danger bg-dangerlight hover:bg-danger hover:text-white" title="Supprimer"><i class="fa fa-trash"></i></button>`}
+      </div>`;
+    },
   },
 ]);
 
-const tableOptions = {
-  order: [[0, "asc"]] as any,
+const tableOptions = computed(() => ({
+  order: [props.order ?? [0, "asc"]] as any,
   language: DT_LANGUAGE,
   createdRow: (row: HTMLElement, data: any) => {
     row.querySelector(".js-edit")?.addEventListener("click", () => openEdit(data));
     row.querySelector(".js-delete")?.addEventListener("click", () => remove(data));
+    (props.rowActions ?? []).forEach((a, i) => {
+      row.querySelector(`.js-act-${i}`)?.addEventListener("click", () => a.onClick(data));
+    });
   },
-};
+}));
+
+const SPAN: Record<number, string> = { 1: "", 2: "lg:col-span-2", 3: "lg:col-span-3" };
+function spanClass(f: HotelField) {
+  if (!wide.value) return f.type === "textarea" || f.span === 3 ? "sm:col-span-2" : "";
+  return f.type === "textarea" ? "sm:col-span-2 lg:col-span-3" : `${f.span === 3 ? "sm:col-span-2" : ""} ${SPAN[f.span ?? 1]}`;
+}
 
 defineExpose({ openCreate, refresh });
 </script>
 
 <template>
-  <div class="container">
+  <component :is="embedded ? 'div' : 'div'" :class="embedded ? '' : 'container'">
     <div class="card !h-auto">
       <div class="flex items-center justify-between border-b border-border py-4 px-5">
         <h4 class="text-base">{{ title }}</h4>
@@ -213,58 +270,76 @@ defineExpose({ openCreate, refresh });
     </div>
 
     <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-card p-6">
-        <h4 class="mb-4 text-base">
-          {{ editing ? "Modifier" : feminine ? "Nouvelle" : "Nouveau" }} {{ singular }}
-        </h4>
-        <p v-if="errorMessage" class="mb-3 rounded-lg bg-dangerlight px-3 py-2 text-danger text-sm">
-          {{ errorMessage }}
-        </p>
-        <div class="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-          <div v-for="f in fields" :key="f.key" :class="f.full || f.type === 'textarea' ? 'sm:col-span-2' : ''">
-            <label class="mb-1">{{ f.label }}<span v-if="f.required" class="text-danger"> *</span></label>
+      <div
+        class="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-2xl bg-card"
+        :class="wide ? 'max-w-5xl' : 'max-w-2xl'"
+      >
+        <div class="flex shrink-0 items-center justify-between bg-primary px-6 py-4 text-white">
+          <h4 class="text-base font-bold text-white">
+            {{ editing ? "Modifier" : feminine ? "Nouvelle" : "Nouveau" }} {{ singular }}
+          </h4>
+          <button type="button" class="text-2xl leading-none text-white/90 hover:text-white" @click="showForm = false">&times;</button>
+        </div>
 
-            <select
-              v-if="f.type === 'select'"
-              v-model="form[f.key]"
-              class="mb-4 h-11 w-full rounded-lg border border-border bg-transparent px-3 focus:border-primary"
-            >
-              <option v-for="o in f.options ?? []" :key="String(o.value)" :value="o.value">{{ o.label }}</option>
-            </select>
+        <div class="min-h-0 flex-1 overflow-y-auto p-6">
+          <p v-if="errorMessage" class="mb-3 rounded-lg bg-dangerlight px-3 py-2 text-danger text-sm">
+            {{ errorMessage }}
+          </p>
+          <div class="grid grid-cols-1 gap-x-5 sm:grid-cols-2" :class="wide ? 'lg:grid-cols-3' : ''">
+            <div v-for="f in visibleFields" :key="f.key" :class="spanClass(f)">
+              <label class="mb-1">{{ f.label }}<span v-if="f.required" class="text-danger"> *</span></label>
 
-            <textarea
-              v-else-if="f.type === 'textarea'"
-              v-model="form[f.key]"
-              rows="3"
-              class="mb-4 w-full rounded-lg border border-border bg-transparent p-3 focus:border-primary"
-            />
+              <div
+                v-if="f.type === 'static'"
+                class="mb-4 flex h-11 items-center rounded-lg bg-bodybg px-3 font-semibold text-primary"
+              >
+                {{ f.compute?.(form) ?? "" }}
+              </div>
 
-            <div v-else-if="f.type === 'file'" class="mb-4">
-              <input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.webp"
-                class="w-full rounded-lg border border-border bg-transparent p-2"
-                :disabled="uploading"
-                @change="onFile(f, $event)"
+              <select
+                v-else-if="f.type === 'select'"
+                v-model="form[f.key]"
+                class="mb-4 h-11 w-full rounded-lg border border-border bg-transparent px-3 focus:border-primary"
+              >
+                <option v-for="o in f.options ?? []" :key="String(o.value)" :value="o.value">{{ o.label }}</option>
+              </select>
+
+              <textarea
+                v-else-if="f.type === 'textarea'"
+                v-model="form[f.key]"
+                rows="3"
+                class="mb-4 w-full rounded-lg border border-border bg-transparent p-3 focus:border-primary"
               />
-              <p v-if="uploading" class="mt-1 text-sm text-body">Téléversement…</p>
-              <p v-else-if="form[f.key]" class="mt-1 text-sm text-body">
-                <i class="fa fa-paperclip mr-1"></i>{{ (f.fileNameKey && form[f.fileNameKey]) || "Fichier joint" }}
-                <a :href="form[f.key]" target="_blank" class="ml-2 text-primary">Ouvrir</a>
-              </p>
-            </div>
 
-            <input
-              v-else
-              v-model="form[f.key]"
-              :type="f.type ?? 'text'"
-              :step="f.step"
-              :min="f.min"
-              class="mb-4 h-11 w-full rounded-lg border border-border bg-transparent px-3 focus:border-primary"
-            />
+              <div v-else-if="f.type === 'file'" class="mb-4">
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  class="w-full rounded-lg border border-border bg-transparent p-2"
+                  :disabled="uploading"
+                  @change="onFile(f, $event)"
+                />
+                <p v-if="uploading" class="mt-1 text-sm text-body">Téléversement…</p>
+                <p v-else-if="form[f.key]" class="mt-1 text-sm text-body">
+                  <i class="fa fa-paperclip mr-1"></i>{{ (f.fileNameKey && form[f.fileNameKey]) || "Fichier joint" }}
+                  <a :href="form[f.key]" target="_blank" class="ml-2 text-primary">Ouvrir</a>
+                </p>
+              </div>
+
+              <input
+                v-else
+                v-model="form[f.key]"
+                :type="f.type ?? 'text'"
+                :step="f.step"
+                :min="f.min"
+                class="mb-4 h-11 w-full rounded-lg border border-border bg-transparent px-3 focus:border-primary"
+              />
+              <p v-if="f.hint" class="-mt-3 mb-4 text-2xs text-body">{{ f.hint }}</p>
+            </div>
           </div>
         </div>
-        <div class="flex gap-2">
+
+        <div class="flex shrink-0 gap-2 border-t border-border p-4">
           <button type="button" class="btn flex-1 border border-border" @click="showForm = false">Annuler</button>
           <button
             type="button"
@@ -277,5 +352,5 @@ defineExpose({ openCreate, refresh });
         </div>
       </div>
     </div>
-  </div>
+  </component>
 </template>

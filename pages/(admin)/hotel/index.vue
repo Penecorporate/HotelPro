@@ -22,7 +22,7 @@ const stats = computed(() => {
     departures: res.filter((x) => day(x.checkOut) === today && x.status === "CHECKED_IN"),
     unpaid: res
       .filter((x) => x.status !== "CANCELLED")
-      .reduce((sum, x) => sum + Math.max(0, Number(x.totalPrice) - Number(x.paidAmount)), 0),
+      .reduce((sum, x) => sum + Number(x.balance), 0),
   };
 });
 
@@ -38,7 +38,17 @@ const cards = computed(() => [
 
 <template>
   <div class="content-body">
-    <CommonNav title="Tableau de bord" name="Hôtel" />
+    <CommonNav
+      title="Tableau de bord"
+      name="Hôtel"
+      :help="[
+        'Le tableau de bord résume l\'activité du jour : chambres disponibles et occupées, taux d\'occupation.',
+        'Les listes Arrivées / Départs du jour vous aident à préparer la réception.',
+        'Le solde à encaisser regroupe les restes à payer des réservations (séjour + consommations).',
+        'Utilisez le menu à gauche : Chambres, Réservations, Clients, Encaissement, Caisse, Dépenses, Documents.',
+      ]"
+      help-title="Tableau de bord"
+    />
     <div class="container">
       <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <div v-for="c in cards" :key="c.label" class="card !h-auto flex items-center gap-4 p-5">

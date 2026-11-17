@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../generated/prisma/client";
+import { seedHotel } from "./seed-hotel";
 import { Hash } from "@adonisjs/hash";
 import { Scrypt } from "@adonisjs/hash/drivers/scrypt";
 
@@ -217,6 +218,9 @@ async function main() {
       },
     });
   }
+
+  // Hotel demo data (Côte d'Ivoire) — no-op if rooms already exist.
+  await seedHotel(prisma, company.id, owner.id);
 
   console.log("Seed terminé.");
   console.log(`Entreprise : ${company.name}`);
